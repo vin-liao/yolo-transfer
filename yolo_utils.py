@@ -72,7 +72,18 @@ def get_anchors(anchors_raw):
 
 	return anchors
 
-def get_generator(batch_size, randomize=True):
+def get_generator(batch_size=32, randomize=True, target=True):
+	"""
+	batch_size: how many items would the generator yield per iteration
+
+	randomize: not generating random data will make sure that we won't yield the same data
+	this is useful for the bottleneck because creating bottleneck features only passes the data once.
+
+	target: whether to yield target array--the ground truth bounding box--or not.
+	"""
+
+	#TODO: this code is pretty dirty, maybe refactor later
+
 	with open(anchors_path, 'r') as f:
 		anchors_raw = f.read()
 
@@ -86,12 +97,10 @@ def get_generator(batch_size, randomize=True):
 
 	#make these np zeros more general
 	batch_image = np.zeros((batch_size, 416, 416, 3))
-	batch_target = np.zeros((batch_size, 13, 13, 25))
+	if target:
+		batch_target = np.zeros((batch_size, 13, 13, 25))
 
 	while True:
-		image_list = []
-		target_list = []
-
 		for i in range(batch_size):
 			if randomize:
 				#select random name from the list
@@ -105,20 +114,42 @@ def get_generator(batch_size, randomize=True):
 					if image_name in file:
 						image = cv2.imread(root + '/' + image_name)
 
-			# image_list.append(cv2.resize(image, (416, 416)))
 			image = crop_square(image)
 			batch_image[i] = cv2.resize(image, (416, 416))
 
-			bounding_box = get_bbox(bbox_raw, image_name)
-			# target_list.append(create_target(image, bounding_box, anchors))
+			if target:
+				bounding_box = get_bbox(bbox_raw, image_name)
 
-			#the image here is cropped image, not the resized image
-			#if the bbox is outside the cropped image, then it automatically skips
-			batch_target[i] = create_target(image, bounding_box, anchors)
+				#the image here is cropped image, not the resized image
+				#if the bbox is outside the cropped image, then it automatically skips
+				batch_target[i] = create_target(image, bounding_box, anchors)
 
-		#yield image and target, target uses create_target()
-		# yield (image_list, target_list)
-		yield batch_image, batch_target
+		if randomize == False:
+			#move the used data to the back of list
+			#this is to avoid using the data over and over again
+			name_list = name_list[batch_size:] + name_list[:batch_size]
+
+		if target:
+			yield batch_image, batch_target
+		else:
+			yield batch_image
+
+def get_generator_bottleneck(batch_size=32):
+	data = np.load('bottleneck_data.npz')
+	x = data['feature']
+	y = data['target']
+
+	#x.shape[1], y.shape[1], ..., x.shape[3], y.shape[3] is the data dimension.
+	batch_x = np.zeros((batch_size, x.shape[1], x.shape[2], x.shape[3]))
+	batch_y = np.zeros((batch_size, y.shape[1], y.shape[2], y.shape[3]))
+
+	while True:
+		for i in range(batch_size):
+			#get seed
+			seed = np.random.choice(len(x))
+			batch_x[i] = x[seed]
+			batch_y[i] = y[seed]
+		yield batch_x, batch_y
 
 def get_data(quantity=100):
 	with open(anchors_path, 'r') as f:
@@ -130,9 +161,18 @@ def get_data(quantity=100):
 	anchors = get_anchors(anchors_raw)
 	name_list = get_image_names(image_path)
 
+	if quantity > 0:
+		#use only "quantity" amount of data
+		name_list = name_list[:quantity]
+	else:
+		#use all the data
+		quantity = len(name_list)
+
+	print('Using', quantity, 'amount of data')
+
 	#make these np zeros more general
-	image_list = np.zeros((quantity, 416, 416, 3))
-	target_list = np.zeros((quantity, 13, 13, 25))
+	image_list = np.zeros((quantity, 416, 416, 3), dtype=np.uint8)
+	target_list = np.zeros((quantity, 13, 13, 25), dtype=np.uint8)
 
 	#randomize the list
 	random.shuffle(name_list)
@@ -161,9 +201,9 @@ def get_data(quantity=100):
 
 def create_target(image, bboxes, anchors, grid_size=13):
 	"""
-	bboxes = ground truth bounding box with [left top width height] information
+	bboxes: ground truth bounding box with [left top width height] information
 
-	anchors = a list of anchors, each elements has a list of two numbers which is the 
+	anchors: a list of anchors, each elements has a list of two numbers which is the 
 	width and height of the anchor boxes relative to the grid 
 	"""
 
