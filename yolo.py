@@ -46,12 +46,12 @@ base_model = load_model('yolo.h5')
 
 #remove the last 2 layers, and make it a new model
 base_model = Model(inputs=base_model.input, outputs=base_model.layers[-3].output)
-base_model.summary()
 
+#combine the base model, with the trained transfered model
 model_input = Input(shape=(416, 416, 3))
 intermediate_output = base_model(model_input)
 prediction = train_model(intermediate_output)
 
 new_model = Model(inputs=model_input, outputs=prediction)
-new_model.summary()
 new_model.save('transfered_model.h5')
+print('Done saving new transfered model.')

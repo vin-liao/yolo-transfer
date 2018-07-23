@@ -9,6 +9,22 @@ image_path = wider_path + '/WIDER_train/images'
 bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
 anchors_path = './yolo_anchors.txt'
 
+def xywh_to_tlbr(x, y, w, h):
+	#x y width height -> top left bottom right
+	t = y - (h / 2)
+	l = x - (w / 2)
+	b = y + (h / 2)
+	r = x + (w / 2)
+	return t, l, b, r
+
+def tlbr_to_xywh(t, l, b, r):
+	#top left bottom right -> x y width height
+	w = r - l
+	h = b - t
+	x = w / 2
+	y = h / 2
+	return x, y, w, h
+
 def get_image_names(path_to_img):
 	#get all name of the images
 	name_list = []
@@ -135,7 +151,8 @@ def get_generator(batch_size=32, randomize=True, target=True):
 			yield batch_image
 
 def get_generator_bottleneck(batch_size=32):
-	data = np.load('bottleneck_data.npz')
+	#this is problematic and causes memory error
+	data = np.load('bottleneck_data.npz', mmap_mode='r')
 	x = data['feature']
 	y = data['target']
 
@@ -238,20 +255,20 @@ def create_target(image, bboxes, anchors, grid_size=13):
 					(y > grid_col and y < grid_col_plus):
 
 					#scaled x and y relative to grid
-					scaled_x = round((x-grid_row)/(grid_row_plus-grid_row), 5)
-					scaled_y = round((y-grid_col)/(grid_col_plus-grid_col), 5)
+					scaled_x = round((x - grid_row) / (grid_row_plus - grid_row), 5)
+					scaled_y = round((y - grid_col) / (grid_col_plus - grid_col), 5)
 
 					#scaled height and width relative to grid
-					scaled_w = round(w/(grid_row_plus-grid_row), 5)
-					scaled_h = round(h/(grid_col_plus-grid_col), 5)
+					scaled_w = round(w / (grid_row_plus - grid_row), 5)
+					scaled_h = round(h / (grid_col_plus - grid_col), 5)
 
 					#scale the anchor boxes
 					#if yolov2
 					offset_num = []
 					for anchor in anchors:
 						#ground truth/anchor boxes
-						scaled_anchor_w = scaled_w/anchor[0]
-						scaled_anchor_h = scaled_h/anchor[1]
+						scaled_anchor_w = scaled_w / anchor[0]
+						scaled_anchor_h = scaled_h / anchor[1]
 						offset_num.append(scaled_anchor_h + scaled_anchor_w)
 
 					"""
@@ -278,3 +295,47 @@ def create_target(image, bboxes, anchors, grid_size=13):
 					[scaled_x, scaled_y, scaled_anchor_w, scaled_anchor_h, 1]
 
 	return image_target
+
+def create_bbox(target):
+	#target is 13x13xdepth, and my depth here is 25
+	#if confidence above threshold, show bounding box
+
+	with open(anchors_path, 'r') as f:
+		anchors_raw = f.read()
+	anchors = get_anchors(anchors_raw)
+
+	grid_size = 13
+	bbox_list = []
+	num_anchors = 5
+	item_per_anchor = 5
+	threshold = 0.01
+	image_shape = 461
+
+	#maybe I should do non max suppresion
+	for row in range(grid_size):
+		grid_row = row*image_shape/grid_size
+		grid_row_plus = (row+1)*image_shape/grid_size
+
+		for col in range(grid_size):
+			grid_col = col*image_shape/grid_size
+			grid_col_plus = (col+1)*image_shape/grid_size
+
+			for curr_anchor in range(num_anchors):
+				anchor_start = curr_anchor * item_per_anchor
+				anchor_end = (curr_anchor+1) * item_per_anchor
+
+				#this row col placement is maybe wrong
+				anchor_value = target[row, col, anchor_start:anchor_end]
+
+				if anchor_value[4] > threshold:
+					x = grid_col + anchor_value[0] * (grid_col_plus - grid_col)
+					y = grid_row + anchor_value[1] * (grid_row_plus - grid_row)
+					w = anchors[curr_anchor][0] * anchor_value[2]
+					h = anchors[curr_anchor][1] * anchor_value[3]
+
+					t, l, b, r = xywh_to_tlbr(x, y, w, h)
+
+					bbox_list.append([t, l, b, r, anchor_value[4]])
+
+	#return list of bounding boxes on that image
+	return bbox_list

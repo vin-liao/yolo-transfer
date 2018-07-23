@@ -10,7 +10,7 @@ wider_path = './wider_dataset'
 image_path = wider_path + '/WIDER_train/images'
 bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
 batch_size = 10
-steps = 10
+steps = 50
 
 #take parameter from terminal
 try:
