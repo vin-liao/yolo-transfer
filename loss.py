@@ -9,6 +9,8 @@ def yolo_loss(y_true, y_pred):
     #set some variables
     LAMBDA_COORD = tf.constant(5, dtype=tf.float32)
     LAMBDA_NOOBJ = tf.constant(0.5, dtype=tf.float32)
+    epsilon = tf.constant(1e-6, dtype=tf.float32)
+    two_const = tf.constant(2, dtype=tf.float32)
 
     #the confidence of y_true, represented by boolean value
     mask = tf.cast(y_true[..., 4], tf.bool)
@@ -25,7 +27,8 @@ def yolo_loss(y_true, y_pred):
     #slice up true and pred tensor
     #for some reason, people apply sigmoid and exp here
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
-    masked_pred_wh = tf.exp(masked_pred[..., 2:4])
+    #i'm not sure about the sigmoid on masked wh
+    masked_pred_wh = tf.sigmoid(masked_pred[..., 2:4])
     masked_pred_o_conf = tf.sigmoid(masked_pred[..., 4:5])
     masked_pred_no_o_conf = tf.sigmoid(neg_masked_pred[..., 4:5])
     #masked_true_c = masked_true[..., 5:] #for class classification
@@ -33,11 +36,14 @@ def yolo_loss(y_true, y_pred):
     masked_true_xy = masked_true[..., 0:2]
     masked_true_wh = masked_true[..., 2:4]
 
+    total_obj_mask = tf.cast(tf.shape(masked_true)[0], tf.float32)
+    total_noobj_mask = tf.cast(tf.shape(neg_masked_pred)[0], tf.float32)
+
     #calculate the loss
-    xy_loss = tf.reduce_sum(tf.square(masked_true_xy-masked_pred_xy))
-    wh_loss = tf.reduce_sum(tf.square(masked_true_wh-masked_pred_wh))
-    obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf))
-    noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf))
+    xy_loss = tf.reduce_sum(tf.square(masked_true_xy-masked_pred_xy)) / (total_obj_mask + epsilon) / two_const
+    wh_loss = tf.reduce_sum(tf.square(masked_true_wh-masked_pred_wh)) / (total_obj_mask + epsilon) / two_const
+    obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf)) / (total_obj_mask + epsilon) / two_const
+    noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf)) / (total_noobj_mask + epsilon) / two_const
 
     loss = LAMBDA_COORD * (xy_loss + wh_loss) + obj_loss + LAMBDA_NOOBJ * noobj_loss
     return loss

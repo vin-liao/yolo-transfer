@@ -331,35 +331,26 @@ def create_target(image, bboxes, anchors, grid_size=13):
                         offset_num.append(scaled_anchor_h + scaled_anchor_w)
 
                         #you can add the class here bro
-                        image_target[col, row, anchor_idx] = [scaled_x, scaled_y, w, h, 1]
 
-                    """
-                    #find the index of the list which has the value closest to 2
-                    #the smallest amount of change to a scale is 1, if w or h is scaled by 1 it means
-                    #that it doesn't change, and having the least amount of change/offset is the objective.
-                    #since there are 2 of them i.e. w and h, we calculate the smallest offset for w and h
-                    #hence the number 2 here, which is 1 for w and 1 for h
+                        #find the index of the list which has the value closest to 2
+                        #the smallest amount of change to a scale is 1, if w or h is scaled by 1 it means
+                        #that it doesn't change, and having the least amount of change/offset is the objective.
+                        #since there are 2 of them i.e. w and h, we calculate the smallest offset for w and h
+                        #hence the number 2 here, which is 1 for w and 1 for h
 
-                    anchor_index = offset_num.index(min(offset_num, key=lambda x:abs(x-2)))
-                    best_anchor = anchors[anchor_index]
+                        anchor_index = offset_num.index(min(offset_num, key=lambda x:abs(x-2)))
+                        best_anchor = anchors[anchor_index]
 
-                    #scalar
-                    #the size of ground truths relative to the grid / anchor sizes
-                    anchor_scalar_w = scaled_w/best_anchor[0]
-                    anchor_scalar_h = scaled_h/best_anchor[1]
+                        #scalar
+                        #the size of ground truths relative to the grid / anchor sizes
+                        anchor_scalar_w = scaled_w/best_anchor[0]
+                        anchor_scalar_h = scaled_h/best_anchor[1]
 
-                    #size of ground truth bbox = anchors * anchor scales
-                    scaled_anchor_w = best_anchor[0]*anchor_scalar_w
-                    scaled_anchor_h = best_anchor[1]*anchor_scalar_h
+                        #size of ground truth bbox = anchors * anchor scales
+                        scaled_anchor_w = best_anchor[0]*anchor_scalar_w
+                        scaled_anchor_h = best_anchor[1]*anchor_scalar_h
 
-                    image_target[col, row, anchor_index*len(anchors):(anchor_index+1)*len(anchors)] = \
-                            [scaled_x, scaled_y, scaled_anchor_w, scaled_anchor_h, 1]
-
-                    #not using scaled width and height
-                    #I think I have a problem here. I only need to assign value to the anchor box with highest iou
-                    image_target[col, row, anchor_index*len(anchors):(anchor_index+1)*len(anchors)] = \
-                            [scaled_x, scaled_y, w, h, 1]
-                    """
+                        image_target[col, row, anchor_idx] = [scaled_x, scaled_y, scaled_anchor_w, scaled_anchor_h, 1]
 
     return image_target
 
