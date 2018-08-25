@@ -4,15 +4,18 @@ import sys
 from keras.models import load_model
 import cv2
 import yolo_utils
+import loss
 import numpy as np
 from keras.models import Sequential, Model
 from keras.layers import Conv2D, Input
+from keras.optimizers import Adam, rmsprop
+import keras.backend as K
 
 wider_path = './wider_dataset'
 image_path = wider_path + '/WIDER_train/images'
 bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
-hm_epoch = 1
-hm_steps = 1
+hm_epoch = 20
+hm_steps = 100
 batch_size = 32
 
 try:
@@ -38,7 +41,7 @@ train_output = Conv2D(25, (1, 1), name='conv2d_train')(train_input)
 
 train_model = Model(inputs=train_input, outputs=train_output)
 
-train_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+train_model.compile(optimizer='adam', loss=loss.yolo_loss, metrics=['accuracy'])
 train_model.fit_generator(gen, epochs=hm_epoch, steps_per_epoch=hm_steps)
 
 #===Concatenating the model===
