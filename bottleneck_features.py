@@ -28,7 +28,7 @@ for opt, arg in opts:
 
 gen = yolo_utils.get_generator(batch_size, randomize=False, target=True)
 bottleneck_feature = np.zeros((batch_size*steps, 13, 13, 1024))
-bottleneck_target = np.zeros((batch_size*steps, 13, 13, 25))
+bottleneck_target = np.zeros((batch_size*steps, 13, 13, 5, 5))
 
 model = load_model('yolo.h5')
 #only take the first until the second last layer
@@ -40,7 +40,7 @@ for i in tqdm(range(steps)):
 
 	x, y = next(gen)
 	batch_prediction = intermediate_model.predict_on_batch(x)
-	
+
 	#set values on feature
 	bottleneck_feature[start_batch:end_batch] = batch_prediction
 	bottleneck_target[start_batch:end_batch] = y

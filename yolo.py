@@ -7,7 +7,7 @@ import yolo_utils
 import loss
 import numpy as np
 from keras.models import Sequential, Model
-from keras.layers import Conv2D, Input
+from keras.layers import Conv2D, Input, Reshape
 from keras.optimizers import Adam, rmsprop
 import keras.backend as K
 
@@ -37,9 +37,12 @@ gen = yolo_utils.get_generator_bottleneck(batch_size)
 
 #===Training the new layer===
 train_input = Input(shape=(13, 13, 1024), name='leaky_re_lu_8')
-train_output = Conv2D(25, (1, 1), name='conv2d_train')(train_input)
+#im creating a 25 filters, I wanted a 5x5 ones. Maybe I could reshape this thing
+train_output_raw = Conv2D(25, (1, 1), name='conv2d_train')(train_input)
+train_output = Reshape((13, 13, 5, -1))(train_output_raw)
 
 train_model = Model(inputs=train_input, outputs=train_output)
+train_model.summary()
 
 train_model.compile(optimizer='adam', loss=loss.yolo_loss, metrics=['accuracy'])
 train_model.fit_generator(gen, epochs=hm_epoch, steps_per_epoch=hm_steps)

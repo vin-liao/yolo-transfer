@@ -215,10 +215,11 @@ def get_generator_bottleneck(batch_size=32):
     data = np.load('bottleneck_data.npz', mmap_mode='r')
     x = data['feature']
     y = data['target']
+    print(y.shape)
 
     #x.shape[1], y.shape[1], ..., x.shape[3], y.shape[3] is the data dimension.
     batch_x = np.zeros((batch_size, x.shape[1], x.shape[2], x.shape[3]))
-    batch_y = np.zeros((batch_size, y.shape[1], y.shape[2], y.shape[3]))
+    batch_y = np.zeros((batch_size, y.shape[1], y.shape[2], y.shape[3], y.shape[4]))
 
     while True:
         for i in range(batch_size):

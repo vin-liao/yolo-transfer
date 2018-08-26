@@ -28,7 +28,7 @@ def yolo_loss(y_true, y_pred):
     #for some reason, people apply sigmoid and exp here
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
     #i'm not sure about the sigmoid on masked wh
-    masked_pred_wh = tf.sigmoid(masked_pred[..., 2:4])
+    masked_pred_wh = tf.exp(masked_pred[..., 2:4])
     masked_pred_o_conf = tf.sigmoid(masked_pred[..., 4:5])
     masked_pred_no_o_conf = tf.sigmoid(neg_masked_pred[..., 4:5])
     #masked_true_c = masked_true[..., 5:] #for class classification
