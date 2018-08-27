@@ -44,7 +44,7 @@ train_output = Reshape((13, 13, 5, -1))(train_output_raw)
 train_model = Model(inputs=train_input, outputs=train_output)
 train_model.summary()
 
-train_model.compile(optimizer='adam', loss=loss.yolo_loss, metrics=['accuracy'])
+train_model.compile(optimizer='rmsprop', loss=loss.yolo_loss, metrics=['accuracy'])
 train_model.fit_generator(gen, epochs=hm_epoch, steps_per_epoch=hm_steps)
 
 #===Concatenating the model===

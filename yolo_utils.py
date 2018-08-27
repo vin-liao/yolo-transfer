@@ -165,7 +165,7 @@ def get_generator(batch_size=32, randomize=True, target=True):
     #make these np zeros more general
     batch_image = np.zeros((batch_size, 416, 416, 3), dtype=np.uint8)
     if target:
-        batch_target = np.zeros((batch_size, 13, 13, 5, len(anchors)))
+        batch_target = np.zeros((batch_size, 13, 13, len(anchors), 5))
 
     while True:
         for i in range(batch_size):
@@ -182,7 +182,6 @@ def get_generator(batch_size=32, randomize=True, target=True):
                         image = cv2.imread(root + '/' + image_name)
 
             image = crop_square(image)
-
             batch_image[i] = cv2.resize(image, (416, 416))
 
             if target:
@@ -276,6 +275,69 @@ def get_data(quantity=5):
     return image_list, target_list
 
 def create_target(image, bboxes, anchors, grid_size=13):
+    """
+    bboxes: ground truth bounding box with [left top width height] information
+
+    anchors: a list of anchors, each elements has a list of two numbers which is the
+    width and height of the anchor boxes relative to the grid
+
+    you also need to choose the best place to put these values based on iou values
+    """
+
+    img_w, img_h = image.shape[:2]
+    image_target = np.zeros((grid_size, grid_size, len(anchors), 5))
+    for bbox in bboxes:
+        #x1 and y1 are left and top respectively
+        left = bbox[0]
+        top = bbox[1]
+        w = bbox[2]
+        h = bbox[3]
+
+        x = int(left+(w/2))
+        y = int(top+(h/2))
+        bottom = left + w
+        right = top + h
+
+        #if bounding box is outside the cropped image, continue
+        if left+w > image.shape[0] or top+h > image.shape[1]:
+            continue
+
+        #you know, I don't actually have to loop ALL through this thing, I can just get the grid_w and grid_h
+        #values from the bounding boxes
+
+        #where the x, y, w, h is relative to the grid and image
+        relative_x = x / (float(img_w) / float(grid_size))
+        relative_y = y / (float(img_h) / float(grid_size))
+        relative_w = w / (float(img_w) / float(grid_size))
+        relative_h = h / (float(img_h) / float(grid_size))
+
+        row = int(np.floor(relative_x))
+        col = int(np.floor(relative_y))
+
+        #grid_relative_x = relative_x - row
+        #grid_relative_y = relative_y - col
+
+        #calculate iou, and place the box on the anchor box with highest iou
+        highest_iou = -1
+        best_anchor_idx = -1
+        for i, anchor in enumerate(anchors):
+            bbox = [0, 0, bottom, right]
+            anchor_w = anchor[0] * (float(img_w) / float(grid_size))
+            anchor_h = anchor[1] * (float(img_h) / float(grid_size))
+
+            anchor_box = [0, 0, anchor_w, anchor_h]
+            iou = calculate_IOU(bbox, anchor_box)
+            if iou > highest_iou:
+                highest_iou = iou
+                best_anchor_idx = i
+
+        image_target[col, row, best_anchor_idx, :4] = [relative_x, relative_y, relative_w, relative_h]
+        image_target[col, row, best_anchor_idx, 4] = 1.
+        #image_target[col, row, best_anchor_idx, 5:] = class
+
+    return image_target
+
+def old_create_target(image, bboxes, anchors, grid_size=13):
     #TODO: coordinate indexing is wrong. x y should be y x
     """
     bboxes: ground truth bounding box with [left top width height] information
@@ -475,14 +537,14 @@ def calculate_IOU(true_bb, pred_bb):
         return 0.0
 
     #calculate the area of rectangle
-    intersection_area = (inter_top - inter_bottom) * (inter_right - inter_left)
-    true_bb_area = (true_bb[0] - true_bb[2]) * (true_bb[1] - true_bb[3])
-    pred_bb_area = (pred_bb[0] - pred_bb[2]) * (pred_bb[1] - pred_bb[3])
+    intersection_area = (inter_bottom - inter_top) * (inter_right - inter_left)
+    true_bb_area = (true_bb[2] - true_bb[0]) * (true_bb[3] - true_bb[1])
+    pred_bb_area = (pred_bb[2] - pred_bb[0]) * (pred_bb[3] - pred_bb[1])
 
     #calculate the iou, dividing area of overlap by area of union
     iou = intersection_area / float(true_bb_area + pred_bb_area - intersection_area)
 
-    if iou < 1.0 and iou > 0.0:
+    if iou <= 1.0 and iou >= 0.0:
         return iou
     else:
         raise ValueError('Incorrect IOU value: %d' %(iou))

@@ -20,14 +20,16 @@ def yolo_loss(y_true, y_pred):
     #the shape of these masked items are (?, 5), which is the item that is filtered through the mask
     #masked true is all the items (i.e. xywhc) that has ground truth confidence 1
     #neg masked is all the items that has conf 0
+
+    #apparently, using boolean mask created a warning
+    #https://stackoverflow.com/questions/44380727/get-userwarning-while-i-use-tf-boolean-mask
     masked_true = tf.cast(tf.boolean_mask(y_true, mask), tf.float32)
     masked_pred = tf.cast(tf.boolean_mask(y_pred, mask), tf.float32)
     neg_masked_pred = tf.cast(tf.boolean_mask(y_pred, neg_mask), tf.float32)
 
     #slice up true and pred tensor
-    #for some reason, people apply sigmoid and exp here
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
-    #i'm not sure about the sigmoid on masked wh
+    #FIXME: tf.exp here is a problem, it's causes the loss to be nan 
     masked_pred_wh = tf.exp(masked_pred[..., 2:4])
     masked_pred_o_conf = tf.sigmoid(masked_pred[..., 4:5])
     masked_pred_no_o_conf = tf.sigmoid(neg_masked_pred[..., 4:5])
@@ -63,7 +65,7 @@ def old_yolo_loss(y_true, y_pred):
         penalize the confidence (slightly decrease it)
     5. if there is an object at grid i, penalize the wrong classification
 
-    The word responsible in here means: the anchor box that has the highest IOU with the
+    the word responsible in here means: the anchor box that has the highest IOU with the
     ground truth. To put it in other words, if the box's job is to predict the object
     in that grid, then penalize it--adjust the weight so that the prediction of that
     particular anchor box is better
