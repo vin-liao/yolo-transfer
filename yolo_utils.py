@@ -185,7 +185,7 @@ def get_data(quantity=5):
 
     #make these np zeros more general
     image_list = np.zeros((quantity, 416, 416, 3), dtype=np.uint8)
-    target_list = np.zeros((quantity, 13, 13, 25))
+    target_list = np.zeros((quantity, 13, 13, len(anchors), 5))
 
     #randomize the list
     random.shuffle(name_list)
@@ -273,7 +273,34 @@ def create_target(image, bboxes, anchors, grid_size=13):
 
     return image_target
 
-def create_bbox(target):
+def create_bbox(target, threshold=0.1):
+    #target shape = (13, 13, 5, anchor_size)
+    img_size = 416
+    grid_size = 13
+    size_per_grid = 416/13
+
+    with open(anchors_path, 'r') as f:
+        anchors_raw = f.read()
+    anchors = get_anchors(anchors_raw)
+
+    idx = np.where(target[..., -1] > threshold)
+    raw_bboxes = target[idx]
+    idx = np.transpose(np.array(idx))
+
+    bbox_list = []
+    for i, box in enumerate(raw_bboxes):
+        indices = idx[i]
+        box_values = box[:4]
+        x = indices[0]*size_per_grid + (box_values[0]*size_per_grid)
+        y = indices[1]*size_per_grid + (box_values[1]*size_per_grid)
+        w = box_values[2]*size_per_grid
+        h = box_values[3]*size_per_grid
+
+        bbox_list.append(xywh_to_tlbr(x, y, w, h))
+
+    return bbox_list
+
+def old_create_bbox(target):
     #target is 13x13xdepth, and my depth here is 25
     #if confidence above threshold, show bounding box
 

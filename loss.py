@@ -4,10 +4,11 @@ import tensorflow as tf
 import yolo_utils
 
 def yolo_loss(y_true, y_pred):
+    #turn this to true to print each loss values, useful for debugging
+    debug_loss = False
+    debug_value = False
+
     #LOSS INPUT SHAPE: (?, 13, 13, 5, 5)
-    #clip the prediction value, so it doesn't exceed 0, and max value of y_true.
-    #the purpose of this is to pervent numerical instability, especially in the early stage of training.
-    y_pred = tf.clip_by_value(y_pred, 0.0, tf.reduce_max(y_true))
 
     LAMBDA_COORD = tf.constant(5, dtype=tf.float32)
     LAMBDA_NOOBJ = tf.constant(0.5, dtype=tf.float32)
@@ -28,8 +29,6 @@ def yolo_loss(y_true, y_pred):
     masked_pred = tf.cast(tf.boolean_mask(y_pred, mask), tf.float32)
     neg_masked_pred = tf.cast(tf.boolean_mask(y_pred, neg_mask), tf.float32)
 
-    #uncomment to see value of prediction tensor
-    #neg_masked_pred = tf.Print(neg_masked_pred, [y_pred], 'The value of prediction:')
 
     """adjusting prediction mask"""
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
@@ -52,11 +51,24 @@ def yolo_loss(y_true, y_pred):
     #calculate the loss
     #each loss value is divided by a number, which is the total mask object. This is used for normalization
     #so that the loss doesn't get too large
-    #TODO: maybe I should change the loss normalization, so it doesn't get too big
     xy_loss = tf.reduce_sum(tf.square(masked_true_xy-masked_pred_xy)) / (total_obj_mask + epsilon) / two_const
     wh_loss = tf.reduce_sum(tf.square(masked_true_wh-masked_pred_wh)) / (total_obj_mask + epsilon) / two_const
     obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf)) / (total_obj_mask + epsilon) / two_const
     noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf)) / (total_noobj_mask + epsilon) / two_const
 
+    #debugging
     loss = LAMBDA_COORD * (xy_loss + wh_loss) + obj_loss + LAMBDA_NOOBJ * noobj_loss
+    if debug_loss:
+        loss = tf.Print(loss, [xy_loss], '\nxy loss:')
+        loss = tf.Print(loss, [wh_loss], 'wh loss:')
+        loss = tf.Print(loss, [obj_loss], 'obj loss:')
+        loss = tf.Print(loss, [noobj_loss], 'noobj loss:')
+
+    if debug_value:
+        loss = tf.Print(loss, [y_pred[..., 0]], '\nThe value of prediction x:', summarize=10)
+        loss = tf.Print(loss, [y_pred[..., 1]], 'The value of prediction y:', summarize=10)
+        loss = tf.Print(loss, [y_pred[..., 2]], 'The value of prediction w:', summarize=10)
+        loss = tf.Print(loss, [y_pred[..., 3]], 'The value of prediction h:', summarize=10)
+        loss = tf.Print(loss, [y_pred[..., 4]], 'The value of prediction conf:', summarize=10)
+
     return loss
