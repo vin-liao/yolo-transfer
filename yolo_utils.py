@@ -13,19 +13,19 @@ anchors_path = './yolo_anchors.txt'
 
 def xywh_to_tlbr(x, y, w, h):
     #x y width height -> top left bottom right
-    t = y - (h / 2)
-    l = x - (w / 2)
-    b = y + (h / 2)
-    r = x + (w / 2)
-    return np.array((t, l, b, r), dtype=np.uint8)
+    t = int(y - (h / 2))
+    l = int(x - (w / 2))
+    b = int(y + (h / 2))
+    r = int(x + (w / 2))
+    return [t, l, b, r]
 
 def tlbr_to_xywh(t, l, b, r):
     #top left bottom right -> x y width height
-    w = r - l
-    h = b - t
-    x = w / 2
-    y = h / 2
-    return np.array((x, y, w, h), dtype=np.uint8)
+    w = int(r - l)
+    h = int(b - t)
+    x = int(w / 2)
+    y = int(h / 2)
+    return [x, y, w, h]
 
 def get_image_names(path_to_img):
     #get all name of the images
@@ -241,17 +241,25 @@ def create_target(image, bboxes, anchors, grid_size=13):
         if left+w > image.shape[0] or top+h > image.shape[1]:
             continue
 
-        #where the x, y, w, h is relative to the grid and image
+        """
+        remove these code if necessary
+        where the x, y, w, h is relative to the grid and image
         relative_x = x / (float(img_w) / float(grid_size))
         relative_y = y / (float(img_h) / float(grid_size))
         relative_w = w / (float(img_w) / float(grid_size))
         relative_h = h / (float(img_h) / float(grid_size))
 
-        row = int(np.floor(relative_x))
-        col = int(np.floor(relative_y))
-
         grid_relative_x = relative_x - row
         grid_relative_y = relative_y - col
+
+        relative_x = x / float(img_w) 
+        relative_y = y / float(img_h) 
+        relative_w = w / float(img_w) 
+        relative_h = h / float(img_h) 
+        """
+
+        row = int(np.floor(relative_x / float(grid_size)))
+        col = int(np.floor(relative_y / float(grid_size)))
 
         #calculate iou, and place the box on the anchor box with highest iou
         highest_iou = -1
@@ -262,26 +270,22 @@ def create_target(image, bboxes, anchors, grid_size=13):
             anchor_h = anchor[1] * (float(img_h) / float(grid_size))
 
             anchor_box = [0, 0, anchor_w, anchor_h]
-            iou = calculate_IOU(bbox, anchor_box)
+            iou = calculate_iou(bbox, anchor_box)
             if iou > highest_iou:
                 highest_iou = iou
                 best_anchor_idx = i
 
-        image_target[col, row, best_anchor_idx, :4] = [grid_relative_x, grid_relative_y, relative_w, relative_h]
+        image_target[col, row, best_anchor_idx, :4] = [relative_x, relative_y, relative_w, relative_h]
         image_target[col, row, best_anchor_idx, 4] = 1.
         #image_target[col, row, best_anchor_idx, 5:] = class
 
     return image_target
 
 def create_bbox(target, threshold=0.1):
-    #target shape = (13, 13, 5, anchor_size)
+    #target shape = (13, 13, total_anchor, anchor_size)
     img_size = 416
     grid_size = 13
     size_per_grid = 416/13
-
-    with open(anchors_path, 'r') as f:
-        anchors_raw = f.read()
-    anchors = get_anchors(anchors_raw)
 
     idx = np.where(target[..., -1] > threshold)
     raw_bboxes = target[idx]
@@ -290,63 +294,25 @@ def create_bbox(target, threshold=0.1):
     bbox_list = []
     for i, box in enumerate(raw_bboxes):
         indices = idx[i]
-        box_values = box[:4]
-        x = indices[0]*size_per_grid + (box_values[0]*size_per_grid)
-        y = indices[1]*size_per_grid + (box_values[1]*size_per_grid)
-        w = box_values[2]*size_per_grid
-        h = box_values[3]*size_per_grid
+        row = indices[1]
+        col = indices[0]
 
-        bbox_list.append(xywh_to_tlbr(x, y, w, h))
+        x = (row + box[0]) * size_per_grid
+        y = (col + box[1]) * size_per_grid
+        w = box[2] * size_per_grid
+        h = box[3] * size_per_grid
 
-    return bbox_list
+        tlbr_value = xywh_to_tlbr(x, y, w, h)
+        if all(n > 0 for n in tlbr_value):
+            if tlbr_value[0] < tlbr_value[2] and tlbr_value[1] < tlbr_value[3]:
+                bbox_list.append(tlbr_value)
 
-def old_create_bbox(target):
-    #target is 13x13xdepth, and my depth here is 25
-    #if confidence above threshold, show bounding box
-
-    with open(anchors_path, 'r') as f:
-        anchors_raw = f.read()
-    anchors = get_anchors(anchors_raw)
-
-    grid_size = 13
-    bbox_list = []
-    num_anchors = 5
-    item_per_anchor = 5
-    threshold = 0.01
-    image_shape = 461
-
-    #maybe I should do non max suppresion
-    for row in range(grid_size):
-        grid_row = row*image_shape/grid_size
-        grid_row_plus = (row+1)*image_shape/grid_size
-
-        for col in range(grid_size):
-            grid_col = col*image_shape/grid_size
-            grid_col_plus = (col+1)*image_shape/grid_size
-
-            for curr_anchor in range(num_anchors):
-                anchor_start = curr_anchor * item_per_anchor
-                anchor_end = (curr_anchor+1) * item_per_anchor
-
-                anchor_value = target[col, row, anchor_start:anchor_end]
-
-                if anchor_value[4] > threshold:
-                    x = grid_col + anchor_value[0] * (grid_col_plus - grid_col)
-                    y = grid_row + anchor_value[1] * (grid_row_plus - grid_row)
-                    w = anchors[curr_anchor][0] * anchor_value[2]
-                    h = anchors[curr_anchor][1] * anchor_value[3]
-
-                    t, l, b, r = xywh_to_tlbr(x, y, w, h)
-
-                    bbox_list.append([t, l, b, r, anchor_value[4]])
-
-    #return list of bounding boxes on that image
     return bbox_list
 
 def non_max_suppresion():
     pass
 
-def calculate_IOU(true_bb, pred_bb):
+def calculate_iou(true_bb, pred_bb):
     #true_bb: bounding box with [top left bottom right] format
     #pred_bb: prediction bounding box with [top left bottom right] format
 
@@ -371,9 +337,9 @@ def calculate_IOU(true_bb, pred_bb):
     if iou <= 1.0 and iou >= 0.0:
         return iou
     else:
-        raise ValueError('Incorrect IOU value: %d' %(iou))
+        raise valueerror('incorrect iou value: %d' %(iou))
 
-def calculate_tensor_IOU(true_bb, pred_bb):
+def calculate_tensor_iou(true_bb, pred_bb):
     #true_bb: ground truth tensor with [top left bottom right] format
     #pred_bb: prediction tensor with [top left bottom right] format
 
@@ -396,12 +362,12 @@ def calculate_tensor_IOU(true_bb, pred_bb):
     iou = tf.cast(iou, dtype=tf.float32)
 
     """
-    The tf.cond below is equivalent with
+    the tf.cond below is equivalent with
 
     if iou < 1.0 and iou > 0.0:
         return iou
     else:
-        raise ValueError('Incorrect IOU value: %d' %(iou))
+        raise valueerror('incorrect iou value: %d' %(iou))
     """
 
     tf.cond(tf.logical_and(tf.greater(iou, tf.constant(0.0)),\

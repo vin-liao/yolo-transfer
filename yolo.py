@@ -9,13 +9,14 @@ import numpy as np
 from keras.models import Sequential, Model
 from keras.layers import Conv2D, Input, Reshape, BatchNormalization, MaxPooling2D
 from keras.optimizers import Adam, rmsprop
+from keras.layers.advanced_activations import ReLU
 import keras.backend as K
 
 wider_path = './wider_dataset'
 image_path = wider_path + '/WIDER_train/images'
 bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
 hm_epoch = 50
-hm_steps = 300
+hm_steps = 30
 batch_size = 32
 
 try:
@@ -39,6 +40,7 @@ gen = yolo_utils.get_generator_bottleneck(batch_size)
 train_input = Input(shape=(13, 13, 1024), name='leaky_re_lu_8')
 train_output_raw = Conv2D(25, (1, 1), name='conv2d_train')(train_input)
 train_output_raw = BatchNormalization()(train_output_raw)
+train_output_raw = ReLU()(train_output_raw)
 train_output = Reshape((13, 13, 5, -1))(train_output_raw)
 #training_output shape = (13, 13, 5, 5)
 

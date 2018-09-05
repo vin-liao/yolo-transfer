@@ -56,8 +56,8 @@ def yolo_loss(y_true, y_pred):
     obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf)) / (total_obj_mask + epsilon) / two_const
     noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf)) / (total_noobj_mask + epsilon) / two_const
 
-    #debugging
     loss = LAMBDA_COORD * (xy_loss + wh_loss) + obj_loss + LAMBDA_NOOBJ * noobj_loss
+    #debugging
     if debug_loss:
         loss = tf.Print(loss, [xy_loss], '\nxy loss:')
         loss = tf.Print(loss, [wh_loss], 'wh loss:')
