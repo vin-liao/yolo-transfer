@@ -251,12 +251,12 @@ def create_target(image, bboxes, anchors, grid_size=13):
 
         grid_relative_x = relative_x - row
         grid_relative_y = relative_y - col
+        """
 
         relative_x = x / float(img_w) 
         relative_y = y / float(img_h) 
         relative_w = w / float(img_w) 
         relative_h = h / float(img_h) 
-        """
 
         row = int(np.floor(relative_x / float(grid_size)))
         col = int(np.floor(relative_y / float(grid_size)))
