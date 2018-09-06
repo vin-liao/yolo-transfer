@@ -9,7 +9,10 @@ import tensorflow as tf
 wider_path = './wider_dataset'
 image_path = wider_path + '/WIDER_train/images'
 bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
-anchors_path = './yolo_anchors.txt'
+anchors_path = './keras_models/yolo_anchors.txt'
+
+def sigmoid(arr):
+  return 1 / (1 + np.exp(-arr))
 
 def xywh_to_tlbr(x, y, w, h):
     #x y width height -> top left bottom right
@@ -128,7 +131,6 @@ def get_generator(batch_size=32, randomize=True, target=True):
                     if image_name in file:
                         image = cv2.imread(root + '/' + image_name)
 
-            image = crop_square(image)
             batch_image[i] = cv2.resize(image, (416, 416))
 
             if target:
@@ -166,7 +168,7 @@ def get_generator_bottleneck(batch_size=32):
             batch_y[i] = y[seed]
         yield batch_x, batch_y
 
-def get_data(quantity=5):
+def get_data(quantity=5, get_sample=False):
     with open(anchors_path, 'r') as f:
         anchors_raw = f.read()
 
@@ -199,8 +201,8 @@ def get_data(quantity=5):
                 if image_name in file:
                     image = cv2.imread(root + '/' + image_name)
 
-        # image_list.append(cv2.resize(image, (416, 416)))
-        image = crop_square(image)
+        if get_sample:
+            return image
         image_list[i] = cv2.resize(image, (416, 416))
 
         bounding_box = get_bbox(bbox_raw, image_name)
@@ -223,10 +225,10 @@ def create_target(image, bboxes, anchors, grid_size=13):
     """
     #TODO: add class on image target
 
-    img_w, img_h = image.shape[:2]
+    img_h, img_w = image.shape[:2]
     image_target = np.zeros((grid_size, grid_size, len(anchors), 5))
     for bbox in bboxes:
-        #x1 and y1 are left and top respectively
+        #x1 (bbox[0]) and y1 (bbox[1]) are left and top respectively
         left = bbox[0]
         top = bbox[1]
         w = bbox[2]
@@ -241,23 +243,12 @@ def create_target(image, bboxes, anchors, grid_size=13):
         if left+w > image.shape[0] or top+h > image.shape[1]:
             continue
 
-        """
-        remove these code if necessary
-        where the x, y, w, h is relative to the grid and image
-        relative_x = x / (float(img_w) / float(grid_size))
-        relative_y = y / (float(img_h) / float(grid_size))
-        relative_w = w / (float(img_w) / float(grid_size))
-        relative_h = h / (float(img_h) / float(grid_size))
+        relative_x = x / float(img_w)
+        relative_y = y / float(img_h)
+        relative_w = w / float(img_w)
+        relative_h = h / float(img_h)
 
-        grid_relative_x = relative_x - row
-        grid_relative_y = relative_y - col
-        """
-
-        relative_x = x / float(img_w) 
-        relative_y = y / float(img_h) 
-        relative_w = w / float(img_w) 
-        relative_h = h / float(img_h) 
-
+        #get the row and column of the xy coordinate
         row = int(np.floor(relative_x / float(grid_size)))
         col = int(np.floor(relative_y / float(grid_size)))
 
@@ -281,11 +272,27 @@ def create_target(image, bboxes, anchors, grid_size=13):
 
     return image_target
 
-def create_bbox(target, threshold=0.1):
+def create_bbox(image, target, threshold=0.3, activation=True):
+    #image parameter to get the shape
     #target shape = (13, 13, total_anchor, anchor_size)
-    img_size = 416
-    grid_size = 13
-    size_per_grid = 416/13
+
+    #xywh values are represented as a value ranging from 0...1, so to make the value of target
+    #the same, we need to apply sigmoid to it.
+
+    img_h, img_w = image.shape[:2]
+    print('SHAPE', img_w, img_h)
+
+    if activation:
+        target[..., 0:2] = sigmoid(target[..., 0:2]) #x y
+        target[..., 2:4] = sigmoid(target[..., 2:4]) #w h
+        target[..., 4:5] = sigmoid(target[..., 4:5]) #conf
+
+    #print(np.amax(target[..., 0:2]))
+    #print(np.amin(target[..., 0:2]))
+    #print(np.amax(target[..., 2:4]))
+    #print(np.amin(target[..., 2:4]))
+    #print(np.amax(target[..., 4:5]))
+    #print(np.amin(target[..., 4:5]))
 
     idx = np.where(target[..., -1] > threshold)
     raw_bboxes = target[idx]
@@ -297,10 +304,11 @@ def create_bbox(target, threshold=0.1):
         row = indices[1]
         col = indices[0]
 
-        x = (row + box[0]) * size_per_grid
-        y = (col + box[1]) * size_per_grid
-        w = box[2] * size_per_grid
-        h = box[3] * size_per_grid
+        x = box[0] * img_w
+        y = box[1] * img_h
+        w = box[2] * img_w
+        h = box[3] * img_h
+        print(x, y, w, h)
 
         tlbr_value = xywh_to_tlbr(x, y, w, h)
         if all(n > 0 for n in tlbr_value):

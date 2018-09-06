@@ -34,7 +34,9 @@ def yolo_loss(y_true, y_pred):
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
 
     #according to paper, it's tf.sqrt instead of tf.exp
-    masked_pred_wh = tf.exp(masked_pred[..., 2:4])
+    #logically, sigmoid works the best here because the ground truth of
+    #wh values are a range between 0...1
+    masked_pred_wh = tf.sigmoid(masked_pred[..., 2:4])
 
     masked_pred_o_conf = tf.sigmoid(masked_pred[..., 4:5])
     masked_pred_no_o_conf = tf.sigmoid(neg_masked_pred[..., 4:5])
@@ -69,6 +71,10 @@ def yolo_loss(y_true, y_pred):
         loss = tf.Print(loss, [y_pred[..., 1]], 'The value of prediction y:', summarize=10)
         loss = tf.Print(loss, [y_pred[..., 2]], 'The value of prediction w:', summarize=10)
         loss = tf.Print(loss, [y_pred[..., 3]], 'The value of prediction h:', summarize=10)
-        loss = tf.Print(loss, [y_pred[..., 4]], 'The value of prediction conf:', summarize=10)
+        #loss = tf.Print(loss, [y_pred[..., 4]], 'The value of prediction conf:', summarize=10)
+
+        flattened = tf.reshape(y_pred[..., 4], [-1])
+        unique_values, _ = tf.unique(flattened)
+        loss = tf.Print(loss, [unique_values], 'unique value of conf', summarize=100)
 
     return loss
