@@ -41,5 +41,5 @@ opt = Adam(lr=learning_rate)
 model.compile(optimizer=opt, loss=loss.yolo_loss)
 model.fit_generator(gen, epochs=hm_epoch, steps_per_epoch=hm_steps, validation_data=val_data)
 
-new_model.save('tiny_yolo.h5')
+model.save('./keras_models/tiny_yolo.h5')
 print('Done saving new transfered model.')

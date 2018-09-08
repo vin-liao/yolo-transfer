@@ -16,24 +16,25 @@ def yolo_loss(y_true, y_pred):
     two_const = tf.constant(2, dtype=tf.float32)
 
     #mask, a boolean tensor, which value depends on the y_true confidence
-    mask = tf.cast(y_true[..., 4], tf.bool)
-    neg_mask = tf.logical_not(mask)
+    mask = tf.equal(y_true[..., 4], 1)
+    neg_mask = tf.equal(y_true[..., 4], 0)
 
     #FIXME: apparently, using boolean mask created a warning
     #https://stackoverflow.com/questions/44380727/get-userwarning-while-i-use-tf-boolean-mask
 
-    #boolean mask is a function that filters out the value that we want (in this case, true)
-    #the filter is the mask itself, derived from y_true confidence value
-    #a simple example: boolean_mask([1, 2, 3, 4], [True, False, True, False]) = [1, 3]
     masked_true = tf.cast(tf.boolean_mask(y_true, mask), tf.float32)
     masked_pred = tf.cast(tf.boolean_mask(y_pred, mask), tf.float32)
     neg_masked_pred = tf.cast(tf.boolean_mask(y_pred, neg_mask), tf.float32)
+
+    #print to monitor prediction value
+    neg_masked_pred = tf.Print(neg_masked_pred, [masked_true], '\nTRUE MASK', summarize=15)
+    neg_masked_pred = tf.Print(neg_masked_pred, [tf.sigmoid(masked_pred)], '\nPRED MASK', summarize=15)
+    neg_masked_pred = tf.Print(neg_masked_pred, [tf.sigmoid(neg_masked_pred)], '\nNO MASK', summarize=15)
 
 
     """adjusting prediction mask"""
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
 
-    #according to paper, it's tf.sqrt instead of tf.exp
     #logically, sigmoid works the best here because the ground truth of
     #wh values are a range between 0...1
     masked_pred_wh = tf.sigmoid(masked_pred[..., 2:4])
