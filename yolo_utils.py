@@ -140,6 +140,17 @@ def get_generator(batch_size=32, randomize=True, target=True):
                 #if the bbox is outside the cropped image, then it automatically skips
                 batch_target[i] = create_target(image, bounding_box, anchors)
 
+            """
+            #For debugging purpose
+            image_bbox_test = create_bbox(image, batch_target[i], activation=False)
+            for box in image_bbox_test:
+                cv2.rectangle(image, (box[1], box[0]), (box[3], box[2]), (0, 255, 0), 3)
+
+            cv2.imshow('draw', image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            """
+
         if randomize == False:
             #move the used data to the back of list
             #this is to avoid using the data over and over again
@@ -212,9 +223,20 @@ def get_data(quantity=5, get_sample=False):
         #if the bbox is outside the cropped image, then it automatically skips
         target_list[i] = create_target(image, bounding_box, anchors)
 
+        """
+        #For debugging purpose
+        image_bbox_test = create_bbox(image_list[i], target_list[i], activation=False)
+        for box in image_bbox_test:
+            cv2.rectangle(image_list[i], (box[1], box[0]), (box[3], box[2]), (0, 255, 0), 3)
+
+        cv2.imshow('draw', image_list[i])
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        """
+
     return image_list, target_list
 
-def create_target(image, bboxes, anchors, grid_size=13):
+def create_target(image, bboxes, anchors, total_grid=13):
     """
     bboxes: ground truth bounding box with [left top width height] information
 
@@ -223,10 +245,11 @@ def create_target(image, bboxes, anchors, grid_size=13):
 
     you also need to choose the best place to put these values based on iou values
     """
+
     #TODO: add class on image target
 
     img_h, img_w = image.shape[:2]
-    image_target = np.zeros((grid_size, grid_size, len(anchors), 5))
+    image_target = np.zeros((total_grid, total_grid, len(anchors), 5))
     for bbox in bboxes:
         #x1 (bbox[0]) and y1 (bbox[1]) are left and top respectively
         left = bbox[0]
@@ -239,26 +262,22 @@ def create_target(image, bboxes, anchors, grid_size=13):
         bottom = left + w
         right = top + h
 
-        #if bounding box is outside the cropped image, continue
-        if left+w > image.shape[0] or top+h > image.shape[1]:
-            continue
-
         relative_x = x / float(img_w)
         relative_y = y / float(img_h)
         relative_w = w / float(img_w)
         relative_h = h / float(img_h)
 
         #get the row and column of the xy coordinate
-        row = int(np.floor(relative_x / float(grid_size)))
-        col = int(np.floor(relative_y / float(grid_size)))
+        row = int(np.floor(relative_y * float(total_grid)))
+        col = int(np.floor(relative_x * float(total_grid)))
 
         #calculate iou, and place the box on the anchor box with highest iou
         highest_iou = -1
         best_anchor_idx = -1
         for i, anchor in enumerate(anchors):
             bbox = [0, 0, bottom, right]
-            anchor_w = anchor[0] * (float(img_w) / float(grid_size))
-            anchor_h = anchor[1] * (float(img_h) / float(grid_size))
+            anchor_w = anchor[0] * (float(img_w) / float(total_grid))
+            anchor_h = anchor[1] * (float(img_h) / float(total_grid))
 
             anchor_box = [0, 0, anchor_w, anchor_h]
             iou = calculate_iou(bbox, anchor_box)
@@ -272,7 +291,7 @@ def create_target(image, bboxes, anchors, grid_size=13):
 
     return image_target
 
-def create_bbox(image, target, threshold=0.3, activation=True):
+def create_bbox(image, target, threshold=0.6, activation=True):
     #image parameter to get the shape
     #target shape = (13, 13, total_anchor, anchor_size)
 
@@ -280,19 +299,11 @@ def create_bbox(image, target, threshold=0.3, activation=True):
     #the same, we need to apply sigmoid to it.
 
     img_h, img_w = image.shape[:2]
-    print('SHAPE', img_w, img_h)
 
     if activation:
         target[..., 0:2] = sigmoid(target[..., 0:2]) #x y
         target[..., 2:4] = sigmoid(target[..., 2:4]) #w h
         target[..., 4:5] = sigmoid(target[..., 4:5]) #conf
-
-    #print(np.amax(target[..., 0:2]))
-    #print(np.amin(target[..., 0:2]))
-    #print(np.amax(target[..., 2:4]))
-    #print(np.amin(target[..., 2:4]))
-    #print(np.amax(target[..., 4:5]))
-    #print(np.amin(target[..., 4:5]))
 
     idx = np.where(target[..., -1] > threshold)
     raw_bboxes = target[idx]
@@ -308,7 +319,6 @@ def create_bbox(image, target, threshold=0.3, activation=True):
         y = box[1] * img_h
         w = box[2] * img_w
         h = box[3] * img_h
-        print(x, y, w, h)
 
         tlbr_value = xywh_to_tlbr(x, y, w, h)
         if all(n > 0 for n in tlbr_value):
@@ -318,6 +328,12 @@ def create_bbox(image, target, threshold=0.3, activation=True):
     return bbox_list
 
 def non_max_suppresion():
+    """
+    psuedocode:
+    pick box with highest confidence, lets call it pred
+    discard (or suppress) the box that has >0.5 iou with pred
+    this means throwing everything that is around that prediction box
+    """
     pass
 
 def calculate_iou(true_bb, pred_bb):
