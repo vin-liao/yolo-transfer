@@ -15,7 +15,6 @@ class YOLO():
 
     def TinyYolo(self):
         base_model = load_model('./keras_models/yolo.h5')
-        base_model.summary()
 
         model_input = Input(shape=(416, 416, 3))
 

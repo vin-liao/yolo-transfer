@@ -41,14 +41,6 @@ def get_image_names(path_to_img):
 
     return name_list
 
-def crop_square(image):
-    #crop the image from the top left for 1:1 ratio
-    smallest = image.shape[0]
-    if image.shape[1] < smallest:
-        smallest = image.shape[1]
-
-    return image[0:smallest, 0:smallest]
-
 def get_bbox(bbox_raw, image_name):
     #this bbox extraction process only works for wider dataset
     bounding_box = []
@@ -113,7 +105,7 @@ def get_generator(batch_size=32, randomize=True, target=True):
     anchors = get_anchors(anchors_raw)
     name_list = get_image_names(image_path)
 
-    batch_image = np.zeros((batch_size, 416, 416, 3), dtype=np.uint8)
+    batch_image = np.zeros((batch_size, 416, 416, 3), dtype=np.float32)
     if target:
         batch_target = np.zeros((batch_size, 13, 13, len(anchors), 5))
 
@@ -131,6 +123,7 @@ def get_generator(batch_size=32, randomize=True, target=True):
                     if image_name in file:
                         image = cv2.imread(root + '/' + image_name)
 
+            image = image/255.
             batch_image[i] = cv2.resize(image, (416, 416))
 
             if target:
@@ -197,7 +190,7 @@ def get_data(quantity=5, get_sample=False):
         quantity = len(name_list)
 
     #make these np zeros more general
-    image_list = np.zeros((quantity, 416, 416, 3), dtype=np.uint8)
+    image_list = np.zeros((quantity, 416, 416, 3), dtype=np.float32)
     target_list = np.zeros((quantity, 13, 13, len(anchors), 5))
 
     #randomize the list
@@ -214,6 +207,9 @@ def get_data(quantity=5, get_sample=False):
 
         if get_sample:
             return image
+
+        image = image/255.
+        #norm_image = cv2.normalize(image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         image_list[i] = cv2.resize(image, (416, 416))
 
         bounding_box = get_bbox(bbox_raw, image_name)
@@ -291,7 +287,7 @@ def create_target(image, bboxes, anchors, total_grid=13):
 
     return image_target
 
-def create_bbox(image, target, threshold=0.6, activation=True):
+def create_bbox(image, target, threshold=0.8, activation=True):
     #image parameter to get the shape
     #target shape = (13, 13, total_anchor, anchor_size)
 
