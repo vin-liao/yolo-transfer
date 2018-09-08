@@ -26,11 +26,6 @@ def yolo_loss(y_true, y_pred):
     masked_pred = tf.cast(tf.boolean_mask(y_pred, mask), tf.float32)
     neg_masked_pred = tf.cast(tf.boolean_mask(y_pred, neg_mask), tf.float32)
 
-    #print to monitor prediction value
-    neg_masked_pred = tf.Print(neg_masked_pred, [masked_true], '\nTRUE MASK', summarize=15)
-    neg_masked_pred = tf.Print(neg_masked_pred, [tf.sigmoid(masked_pred)], '\nPRED MASK', summarize=15)
-    neg_masked_pred = tf.Print(neg_masked_pred, [tf.sigmoid(neg_masked_pred)], '\nNO MASK', summarize=15)
-
 
     """adjusting prediction mask"""
     masked_pred_xy = tf.sigmoid(masked_pred[..., 0:2])
@@ -76,6 +71,11 @@ def yolo_loss(y_true, y_pred):
 
         flattened = tf.reshape(y_pred[..., 4], [-1])
         unique_values, _ = tf.unique(flattened)
-        loss = tf.Print(loss, [unique_values], 'unique value of conf', summarize=100)
+        loss = tf.Print(loss, [unique_values], 'Unique value of conf', summarize=100)
 
+        #prediction value
+        loss = tf.Print(loss, [masked_true], 'True mas', summarize=15)
+        loss = tf.Print(loss, [tf.sigmoid(masked_pred)], 'Pred mask', summarize=15)
+        loss = tf.Print(loss, [tf.sigmoid(neg_masked_pred)], 'No mask', summarize=15)
+        
     return loss
