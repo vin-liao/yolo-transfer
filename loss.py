@@ -13,7 +13,6 @@ def yolo_loss(y_true, y_pred):
     LAMBDA_COORD = tf.constant(5, dtype=tf.float32)
     LAMBDA_NOOBJ = tf.constant(0.5, dtype=tf.float32)
     epsilon = tf.constant(1e-6, dtype=tf.float32)
-    two_const = tf.constant(2, dtype=tf.float32)
 
     #mask, a boolean tensor, which value depends on the y_true confidence
     mask = tf.equal(y_true[..., 4], 1)
@@ -49,10 +48,10 @@ def yolo_loss(y_true, y_pred):
     #calculate the loss
     #each loss value is divided by a number, which is the total mask object. This is used for normalization
     #so that the loss doesn't get too large
-    xy_loss = tf.reduce_sum(tf.square(masked_true_xy-masked_pred_xy)) / (total_obj_mask + epsilon) / two_const
-    wh_loss = tf.reduce_sum(tf.square(masked_true_wh-masked_pred_wh)) / (total_obj_mask + epsilon) / two_const
-    obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf)) / (total_obj_mask + epsilon) / two_const
-    noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf)) / (total_noobj_mask + epsilon) / two_const
+    xy_loss = tf.reduce_sum(tf.square(masked_true_xy-masked_pred_xy)) / (total_obj_mask + epsilon)
+    wh_loss = tf.reduce_sum(tf.square(masked_true_wh-masked_pred_wh)) / (total_obj_mask + epsilon)
+    obj_loss = tf.reduce_sum(tf.square(1-masked_pred_o_conf)) / (total_obj_mask + epsilon)
+    noobj_loss = tf.reduce_sum(tf.square(0-masked_pred_no_o_conf)) / (total_noobj_mask + epsilon)
 
     loss = LAMBDA_COORD * (xy_loss + wh_loss) + obj_loss + LAMBDA_NOOBJ * noobj_loss
     #debugging

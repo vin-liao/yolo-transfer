@@ -7,8 +7,10 @@ import keras.backend as K
 import tensorflow as tf
 
 wider_path = './wider_dataset'
-image_path = wider_path + '/WIDER_train/images'
-bbox_path = wider_path + '/wider_face_train_bbx_gt.txt'
+train_path = wider_path + '/WIDER_train/images'
+validation_path = wider_path + '/WIDER_val/images'
+bbox_path_train = wider_path + '/wider_face_train_bbx_gt.txt'
+bbox_path_val = wider_path + '/wider_face_val_bbx_gt.txt'
 anchors_path = './keras_models/yolo_anchors.txt'
 
 def sigmoid(arr):
@@ -33,18 +35,19 @@ def tlbr_to_xywh(t, l, b, r):
 def get_image_names(path_to_img):
     #get all name of the images
     name_list = []
-    category = os.listdir(image_path)
+    category = os.listdir(path_to_img)
     for cat in category:
-        img_list = os.listdir(image_path + '/{}'.format(cat))
+        img_list = os.listdir(path_to_img + '/{}'.format(cat))
         for image in img_list:
             name_list.append(image)
 
     return name_list
 
-def get_bbox(bbox_raw, image_name):
+def get_bbox(bbox_raw, image_name, image_shape):
     #this bbox extraction process only works for wider dataset
     bounding_box = []
     raw_bbox_text = bbox_raw
+    img_w, img_h = image_shape[:2]
 
     #find the bounding box text with the corresponding name
     bbox_of_image = re.findall('{}\n[\n\s\d]+'.format(image_name), raw_bbox_text)[0]
@@ -57,13 +60,27 @@ def get_bbox(bbox_raw, image_name):
     bbox_of_image = re.sub('\n\d+\n', '', bbox_of_image)
     bbox_of_image = bbox_of_image.split('\n')
 
+    ##if there is too much face (above threshold), then remove. From what I observed, the image
+    ##with many faces is bad data with small bounding boxes
+    #
+    ##you should remove this when you're trying to train a object detection image
+    #if len(bbox_of_image) < max_box:
+    #    return -1
+
     for one_bbox in bbox_of_image:
         #split the list which is separated by space
         one_bbox = one_bbox.split()
         #take the first four of the list, which are the left top width height respectively
         one_bbox = one_bbox[:4]
-        bounding_box.append([int(i) for i in one_bbox])
+        
+        #relative_w = int(one_bbox[2])/img_w
+        #relative_h = int(one_bbox[3])/img_h
 
+        ##remove small bounding box, because it's a noise to the network
+        #if relative_w > 0.05 or relative_h > 0.05:
+        #    bounding_box.append([int(i) for i in one_bbox])
+
+        bounding_box.append([int(i) for i in one_bbox])
     return bounding_box
 
 def get_anchors(anchors_raw):
@@ -85,7 +102,7 @@ def get_anchors(anchors_raw):
 
     return anchors
 
-def get_generator(batch_size=32, randomize=True, target=True):
+def get_generator(batch_size=32, randomize=True, target=True, validation=False):
     """
     batch_size: how many items would the generator yield per iteration
 
@@ -98,11 +115,18 @@ def get_generator(batch_size=32, randomize=True, target=True):
     #TODO: this code is pretty dirty, maybe refactor later
     with open(anchors_path, 'r') as f:
         anchors_raw = f.read()
+    anchors = get_anchors(anchors_raw)
+
+    if validation:
+        image_path = validation_path
+        bbox_path = bbox_path_val
+    else:
+        image_path = train_path
+        bbox_path = bbox_path_train
 
     with open(bbox_path, 'r') as f:
         bbox_raw = f.read()
 
-    anchors = get_anchors(anchors_raw)
     name_list = get_image_names(image_path)
 
     batch_image = np.zeros((batch_size, 416, 416, 3), dtype=np.float32)
@@ -110,28 +134,32 @@ def get_generator(batch_size=32, randomize=True, target=True):
         batch_target = np.zeros((batch_size, 13, 13, len(anchors), 5))
 
     while True:
+        random.shuffle(name_list)
         for i in range(batch_size):
-            if randomize:
-                #select random name from the list
-                seed = np.random.choice(len(name_list))
-                image_name = name_list[seed]
-            else:
-                image_name = name_list[i]
+            image_name = name_list[i]
 
             for root, dirs, files in os.walk(image_path):
                 for file in files:
                     if image_name in file:
+                        
+                        #TODO: if root contains the keyword (folder that I want to include)
+                        #then imread, else just ignore that shit
                         image = cv2.imread(root + '/' + image_name)
+                        image = image/255. #normalize image
 
-            image = image/255.
-            batch_image[i] = cv2.resize(image, (416, 416))
+            #perform image preprocessing here (maybe augment here too)
 
             if target:
-                bounding_box = get_bbox(bbox_raw, image_name)
+                bounding_box = get_bbox(bbox_raw, image_name, image.shape)
 
-                #the image here is cropped image, not the resized image
-                #if the bbox is outside the cropped image, then it automatically skips
-                batch_target[i] = create_target(image, bounding_box, anchors)
+                #FIXME: bad code bro, there are 2 if bounding_box
+                #FIXME: issue might emerge if I augment in create_target code
+                if bounding_box:
+                    batch_target[i] = create_target(image, bounding_box, anchors)
+
+            #if bounding box list isn't empty, use the image
+            if bounding_box:  
+                batch_image[i] = cv2.resize(image, (416, 416))
 
             """
             #For debugging purpose
@@ -172,7 +200,14 @@ def get_generator_bottleneck(batch_size=32):
             batch_y[i] = y[seed]
         yield batch_x, batch_y
 
-def get_data(quantity=5, get_sample=False):
+def get_data(quantity=5, get_sample=False, validation=False):
+    if validation:
+        image_path = validation_path
+        bbox_path = bbox_path_val
+    else:
+        image_path = train_path
+        bbox_path = bbox_path_train
+
     with open(anchors_path, 'r') as f:
         anchors_raw = f.read()
 
@@ -195,6 +230,7 @@ def get_data(quantity=5, get_sample=False):
 
     #randomize the list
     random.shuffle(name_list)
+
     if quantity > 0:
         name_list = name_list[:quantity]
 
@@ -212,7 +248,7 @@ def get_data(quantity=5, get_sample=False):
         #norm_image = cv2.normalize(image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
         image_list[i] = cv2.resize(image, (416, 416))
 
-        bounding_box = get_bbox(bbox_raw, image_name)
+        bounding_box = get_bbox(bbox_raw, image_name, image.shape)
         # target_list.append(create_target(image, bounding_box, anchors))
 
         #the image here is cropped image, not the resized image
@@ -263,7 +299,7 @@ def create_target(image, bboxes, anchors, total_grid=13):
         relative_w = w / float(img_w)
         relative_h = h / float(img_h)
 
-        #get the row and column of the xy coordinate
+        #get the row and column of the xy coordinate based on grid
         row = int(np.floor(relative_y * float(total_grid)))
         col = int(np.floor(relative_x * float(total_grid)))
 
@@ -272,6 +308,7 @@ def create_target(image, bboxes, anchors, total_grid=13):
         best_anchor_idx = -1
         for i, anchor in enumerate(anchors):
             bbox = [0, 0, bottom, right]
+
             anchor_w = anchor[0] * (float(img_w) / float(total_grid))
             anchor_h = anchor[1] * (float(img_h) / float(total_grid))
 
@@ -287,7 +324,7 @@ def create_target(image, bboxes, anchors, total_grid=13):
 
     return image_target
 
-def create_bbox(image, target, threshold=0.8, activation=True):
+def create_bbox(image, target, threshold=0.6, activation=True):
     #image parameter to get the shape
     #target shape = (13, 13, total_anchor, anchor_size)
 
@@ -315,6 +352,8 @@ def create_bbox(image, target, threshold=0.8, activation=True):
         y = box[1] * img_h
         w = box[2] * img_w
         h = box[3] * img_h
+
+        print(box)
 
         tlbr_value = xywh_to_tlbr(x, y, w, h)
         if all(n > 0 for n in tlbr_value):

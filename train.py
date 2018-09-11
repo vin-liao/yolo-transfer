@@ -32,14 +32,18 @@ for opt, arg in opts:
 		sys.exit(2)
 
 gen = yolo_utils.get_generator(batch_size)
-val_data = yolo_utils.get_data(100)
+val_gen = yolo_utils.get_generator(batch_size, validation=True)
 
 model_obj = models.YOLO()
 model = model_obj.TinyYolo()
 
 opt = Adam(lr=learning_rate)
 model.compile(optimizer=opt, loss=loss.yolo_loss)
-model.fit_generator(gen, epochs=hm_epoch, steps_per_epoch=hm_steps, validation_data=val_data)
+model.fit_generator(gen,
+        epochs=hm_epoch,
+        steps_per_epoch=hm_steps,
+        validation_data=val_gen,
+        validation_steps=20)
 
 model.save('./keras_models/tiny_yolo.h5')
-print('Done saving new transfered model.')
+print('Done saving new model.')
