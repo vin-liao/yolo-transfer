@@ -5,6 +5,7 @@ import yolo_utils
 import loss
 from keras.optimizers import Adam, rmsprop
 import models
+from keras.callbacks import EarlyStopping
 
 wider_path = './wider_dataset'
 image_path = wider_path + '/WIDER_train/images'
@@ -37,13 +38,18 @@ val_gen = yolo_utils.get_generator(batch_size, validation=True)
 model_obj = models.YOLO()
 model = model_obj.TinyYolo()
 
+#callbacks
+callback_list = [EarlyStopping(monitor='val_loss', patience=5)]
+
+#network
 opt = Adam(lr=learning_rate)
 model.compile(optimizer=opt, loss=loss.yolo_loss)
 model.fit_generator(gen,
         epochs=hm_epoch,
         steps_per_epoch=hm_steps,
         validation_data=val_gen,
-        validation_steps=20)
+        validation_steps=20,
+        callbacks=callback_list)
 
 model.save('./keras_models/tiny_yolo.h5')
 print('Done saving new model.')

@@ -43,7 +43,19 @@ def get_image_names(path_to_img):
 
     return name_list
 
-def get_bbox(bbox_raw, image_name, image_shape):
+def get_bbox(bbox_raw, image_name, image_shape, threshold=0.05):
+    """
+    This function will find the bounding box, given the image name.
+    It's not all inputted though, only certain image are chosen to be an input
+
+    Since YOLOv2 doesn't really perform well on small objects, these function will
+    avoid using image that has small objects (weight and height < threshold
+    where threshold is a value relative to image size).
+
+    e.g. threshold 0.1 with image size 600x1000 means that it'll not accept bounding
+    box with with width width smaller than 60 or height smaller than 100
+    """
+
     #this bbox extraction process only works for wider dataset
     bounding_box = []
     raw_bbox_text = bbox_raw
@@ -56,32 +68,35 @@ def get_bbox(bbox_raw, image_name, image_shape):
     bbox_of_image = bbox_of_image[:bbox_of_image.rfind('\n')]
     #get the bounding box string from the raw text
     bbox_of_image = bbox_of_image[bbox_of_image.find('\n', bbox_of_image.find('\n')):]
-    #remove the count number from bounding box
+
+    #get count number, and remove it
+    #find how many faces in the image
+    count = re.findall('\n\d+\n', bbox_of_image)[0]
+    count = re.sub('\n', '', count)
+    count = int(count)
+
+    #remove the count value from raw bbox text
     bbox_of_image = re.sub('\n\d+\n', '', bbox_of_image)
     bbox_of_image = bbox_of_image.split('\n')
-
-    ##if there is too much face (above threshold), then remove. From what I observed, the image
-    ##with many faces is bad data with small bounding boxes
-    #
-    ##you should remove this when you're trying to train a object detection image
-    #if len(bbox_of_image) < max_box:
-    #    return -1
 
     for one_bbox in bbox_of_image:
         #split the list which is separated by space
         one_bbox = one_bbox.split()
         #take the first four of the list, which are the left top width height respectively
         one_bbox = one_bbox[:4]
-        
-        #relative_w = int(one_bbox[2])/img_w
-        #relative_h = int(one_bbox[3])/img_h
 
-        ##remove small bounding box, because it's a noise to the network
-        #if relative_w > 0.05 or relative_h > 0.05:
-        #    bounding_box.append([int(i) for i in one_bbox])
+        relative_w = int(one_bbox[2])/img_w
+        relative_h = int(one_bbox[3])/img_h
 
-        bounding_box.append([int(i) for i in one_bbox])
-    return bounding_box
+        #remove small bounding box, because it's a noise to the network
+        if relative_w > threshold or relative_h > threshold:
+            bounding_box.append([int(i) for i in one_bbox])
+
+        #bounding_box.append([int(i) for i in one_bbox])
+    if count == len(bounding_box):
+        return bounding_box
+    else:
+        return []
 
 def get_anchors(anchors_raw):
     #it's separated by two spaces
@@ -135,13 +150,15 @@ def get_generator(batch_size=32, randomize=True, target=True, validation=False):
 
     while True:
         random.shuffle(name_list)
-        for i in range(batch_size):
-            image_name = name_list[i]
+        i = 0
+        img_index = 0
+        while i < batch_size:
+            image_name = name_list[img_index]
 
             for root, dirs, files in os.walk(image_path):
                 for file in files:
                     if image_name in file:
-                        
+
                         #TODO: if root contains the keyword (folder that I want to include)
                         #then imread, else just ignore that shit
                         image = cv2.imread(root + '/' + image_name)
@@ -153,13 +170,17 @@ def get_generator(batch_size=32, randomize=True, target=True, validation=False):
                 bounding_box = get_bbox(bbox_raw, image_name, image.shape)
 
                 #FIXME: bad code bro, there are 2 if bounding_box
-                #FIXME: issue might emerge if I augment in create_target code
+                #FIXME: create_target() might cause some issue if I augment
                 if bounding_box:
                     batch_target[i] = create_target(image, bounding_box, anchors)
 
             #if bounding box list isn't empty, use the image
-            if bounding_box:  
+            if bounding_box:
                 batch_image[i] = cv2.resize(image, (416, 416))
+                i+=1
+
+            img_index+=1
+
 
             """
             #For debugging purpose
@@ -352,8 +373,6 @@ def create_bbox(image, target, threshold=0.6, activation=True):
         y = box[1] * img_h
         w = box[2] * img_w
         h = box[3] * img_h
-
-        print(box)
 
         tlbr_value = xywh_to_tlbr(x, y, w, h)
         if all(n > 0 for n in tlbr_value):
